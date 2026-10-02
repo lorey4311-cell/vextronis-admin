@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>La Oficina Virtual de Vextronis</title>
+
+    <!-- Cliente de Supabase (se usa solo cuando el interruptor este activado) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        /* =========================================
+           PALETA DE COLORES VEXTRONIS
+           ========================================= */
+        :root {
+            --azul-cielo: #5BA3E6;
+            --azul-medio: #3A7BD5;
+            --azul-marino: #1E4D8C;
+            --azul-oscuro: #0f2a52;
+            --blanco: #FFFFFF;
+            --fondo-principal: #0d1117;
+            --fondo-secundario: #161b22;
+            --fondo-terciario: #21262d;
+            --texto-secundario: #8b949e;
+            --rojo-alerta: #ff4d4d;
+            --verde-exito: #4caf50;
+            --naranja-advertencia: #ffa500;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background-color: var(--fondo-principal);
+            color: var(--blanco);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        body.modo-panel { align-items: flex-start; }
+
+        /* =========================================
+           AVISO HONESTO DE PREPARACION
+           ========================================= */
+        .banner-preparacion {
+            display: none;
+            background-color: rgba(255, 165, 0, 0.12);
+            border: 1px solid rgba(255, 165, 0, 0.4);
+            color: var(--naranja-advertencia);
+            border-radius: 10px;
+            padding: 12px;
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        /* =========================================
+           PANTALLA DE LOGIN
+           ========================================= */
+        .login-container {
+            background-color: var(--fondo-secundario);
+            padding: 40px 30px;
+            border-radius: 20px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.7);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            border: 1px solid var(--fondo-terciario);
+        }
+
+        .logo-container { margin-bottom: 25px; }
+
+        .logo-container img {
+            width: 120px;
+            height: 120px;
+            object-fit: contain;
+            filter: drop-shadow(0 4px 15px rgba(58, 123, 213, 0.4));
+        }
+
+        /* Logo de respaldo si la imagen no existe todavia */
+        .logo-fallback {
+            display: none;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 25px;
+            border-radius: 28px;
+            place-items: center;
+            font-size: 52px;
+            font-weight: 800;
+            color: var(--blanco);
+            background: linear-gradient(135deg, var(--azul-medio), var(--azul-marino));
+            box-shadow: 0 4px 15px rgba(58, 123, 213, 0.4);
+        }
+
+        .login-container h1 {
+            color: var(--azul-cielo);
+            font-size: 24px;
+            margin: 0 0 10px 0;
+            font-weight: 700;
+        }
+
+        .login-container p {
+            color: var(--texto-secundario);
+            font-size: 14px;
+            margin: 0 0 30px 0;
+        }
+
+        .input-group { margin-bottom: 15px; text-align: left; }
+
+        .input-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--texto-secundario);
+            margin-bottom: 6px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--fondo-principal);
+            border: 1px solid var(--fondo-terciario);
+            border-radius: 8px;
+            color: var(--blanco);
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--azul-medio);
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.2);
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, var(--azul-medio), var(--azul-marino));
+            color: var(--blanco);
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-login:hover {
+            background: linear-gradient(135deg, var(--azul-cielo), var(--azul-medio));
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(58, 123, 213, 0.4);
+        }
+
+        .btn-login:disabled {
+            background: var(--fondo-terciario);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .error-msg {
+            color: var(--rojo-alerta);
+            font-size: 13px;
+            margin-top: 15px;
+            display: none;
+            background-color: rgba(255, 77, 77, 0.1);
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 77, 77, 0.3);
+        }
+
+        /* =========================================
+           PANEL DE ADMINISTRADOR
+           ========================================= */
+        #panel-admin {
+            display: none;
+            width: 100%;
+            max-width: 960px;
+            padding: 20px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--fondo-terciario);
+        }
+
+        header .logo-header {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 10px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 28px;
+            color: var(--azul-cielo);
+            font-weight: 700;
+        }
+
+        header p {
+            color: var(--texto-secundario);
+            margin-top: 8px;
+            font-size: 14px;
+        }
+
+        /* Tarjetas de resumen */
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background-color: var(--fondo-secundario);
+            border: 1px solid var(--fondo-terciario);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-card .stat-numero {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--azul-cielo);
+        }
+
+        .stat-card .stat-titulo {
+            font-size: 12px;
+            color: var(--texto-secundario);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Pestañas */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            background-color: var(--fondo-secundario);
+            color: var(--texto-secundario);
+            border: 1px solid var(--fondo-terciario);
+            padding: 10px 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.activa {
+            background: linear-gradient(135deg, var(--azul-medio), var(--azul-marino));
+            color: var(--blanco);
+            border-color: transparent;
+        }
+
+        .tab-seccion { display: none; }
+        .tab-seccion.activa { display: block; }
+
+        /* Lista de reportes / usuarios */
+        .lista-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .reporte-card {
+            background-color: var(--fondo-secundario);
+            border-radius: 12px;
+            border: 1px solid var(--fondo-terciario);
+            border-left: 5px solid var(--rojo-alerta);
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            transition: transform 0.2s;
+        }
+
+        .reporte-card.prioridad-media { border-left-color: var(--naranja-advertencia); }
+        .reporte-card.prioridad-baja { border-left-color: var(--azul-medio); }
+        .reporte-card:hover { transform: translateX(5px); }
+
+        .reporte-info { flex-grow: 1; min-width: 200px; }
+
+        .reporte-info h3 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .reporte-info p { margin: 0; font-size: 14px; color: var(--texto-secundario); }
+
+        .badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: var(--blanco);
+        }
+
+        .badge-alta { background-color: var(--rojo-alerta); }
+        .badge-media { background-color: var(--naranja-advertencia); }
+        .badge-baja { background-color: var(--azul-medio); }
+
+        .acciones { display: flex; gap: 10px; }
+
+        .btn-accion {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.2s;
+            color: var(--blanco);
+        }
+
+        .btn-accion:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .btn-accion:disabled {
+            background-color: var(--fondo-terciario) !important;
+            color: var(--texto-secundario);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-restaurar { background: linear-gradient(135deg, #4caf50, #2e7d32); }
+        .btn-banear { background: linear-gradient(135deg, var(--rojo-alerta), #c62828); }
+
+        .nota-desactivado {
+            font-size: 11px;
+            color: var(--texto-secundario);
+            width: 100%;
+            text-align: right;
+            margin-top: 4px;
+        }
+
+        /* Estado vacio honesto */
+        .estado-vacio {
+            text-align: center;
+            color: var(--texto-secundario);
+            padding: 40px 20px;
+            background-color: var(--fondo-secundario);
+            border: 1px dashed var(--fondo-terciario);
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .btn-logout {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: var(--fondo-terciario);
+            color: var(--texto-secundario);
+            border: 1px solid var(--fondo-terciario);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            z-index: 20;
+        }
+
+        .btn-logout:hover { background-color: var(--rojo-alerta); color: var(--blanco); }
+
+        @media (max-width: 600px) {
+            .reporte-card { flex-direction: column; align-items: flex-start; }
+            .acciones { width: 100%; justify-content: space-between; }
+            .btn-accion { flex: 1; }
+            .login-container { margin: 20px; }
+            .nota-desactivado { text-align: left; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- =========================================
+         1. PANTALLA DE LOGIN
+         ========================================= -->
+    <div class="login-container" id="pantalla-login">
+        <div class="logo-container">
+            <img src="img/logo-vextronis.png" alt="Logo Vextronis"
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
+            <div class="logo-fallback" id="logo-fallback">V</div>
+        </div>
+        <h1>La Oficina Virtual</h1>
+        <p>Acceso restringido. Solo para la dueña de Vextronis.</p>
+
+        <div class="banner-preparacion" id="banner-preparacion">
+            ⚠️ Este panel está en preparación. La conexión con la base de datos
+            se activa el 5 de octubre. Todo lo que ves aquí es la estructura real,
+            sin datos de prueba ni simulaciones.
+        </div>
+
+        <form id="login-form">
+            <div class="input-group">
+                <label for="email">Correo electrónico</label>
+                <input type="email" id="email" placeholder="tu-correo@vextronis.com" autocomplete="username" required>
+            </div>
+            <div class="input-group">
+                <label for="password">Contraseña</label>
+                <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required>
+            </div>
+
+            <button type="submit" class="btn-login" id="btn-entrar">Iniciar Sesión</button>
+            <p class="error-msg" id="error-msg"></p>
+        </form>
+    </div>
+
+    <!-- =========================================
+         2. PANEL DE ADMINISTRADOR (oculto hasta entrar)
+         ========================================= -->
+    <div id="panel-admin">
+        <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
+
+        <header>
+            <img src="img/logo-vextronis.png" alt="Logo Vextronis" class="logo-header"
+                 onerror="this.style.display='none';">
+            <h1>La Oficina Virtual de Vextronis</h1>
+            <p id="mensaje-bienvenida">Bienvenida, jefa.</p>
+        </header>
+
+        <!-- Resumen general -->
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-numero" id="stat-usuarios">—</div>
+                <div class="stat-titulo">Usuarios</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-numero" id="stat-reportes">—</div>
+                <div class="stat-titulo">Reportes pendientes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-numero" id="stat-baneados">—</div>
+                <div class="stat-titulo">Usuarios baneados</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-numero" id="stat-actividad">—</div>
+                <div class="stat-titulo">Actividad hoy</div>
+            </div>
+        </div>
+
+        <!-- Pestañas -->
+        <div class="tabs">
+            <button class="tab-btn activa" data-tab="reportes">Reportes</button>
+            <button class="tab-btn" data-tab="usuarios">Usuarios</button>
+            <button class="tab-btn" data-tab="actividad">Actividad</button>
+        </div>
+
+        <!-- Seccion: Reportes -->
+        <div class="tab-seccion activa" id="tab-reportes">
+            <div class="lista-container" id="lista-reportes">
+                <div class="estado-vacio">
+                    Los reportes que envíen los usuarios aparecerán aquí.<br>
+                    <span style="font-size:12px;">(Se muestran datos reales cuando la base de datos esté conectada, el 5 de octubre)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seccion: Usuarios -->
+        <div class="tab-seccion" id="tab-usuarios">
+            <div class="lista-container" id="lista-usuarios">
+                <div class="estado-vacio">
+                    Aquí verás la lista de todos los usuarios registrados en Vextronis,
+                    con su foto, nombre, número y estado.<br>
+                    <span style="font-size:12px;">(Datos reales a partir del 5 de octubre)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seccion: Actividad -->
+        <div class="tab-seccion" id="tab-actividad">
+            <div class="lista-container" id="lista-actividad">
+                <div class="estado-vacio">
+                    Aquí verás lo que hacen los usuarios: mensajes, publicaciones en el muro,
+                    estados, nuevos registros y más.<br>
+                    <span style="font-size:12px;">(Datos reales a partir del 5 de octubre)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ================================================================
+        // CONFIGURACION
+        // ================================================================
+        // INTERRUPTOR PRINCIPAL: el 5 de octubre cambia `conectado` a `true`,
+        // pega tu URL y tu ANON KEY, y el cerebro queda enchufado.
+        // Antes de esa fecha la pagina NO finge nada: avisa honestamente
+        // que esta en preparacion y no deja entrar a nadie.
+        const CONFIG = {
+            conectado: false,                 // <-- 5 de octubre: true
+            supabaseUrl: 'PEGA_TU_SUPABASE_URL',
+            supabaseAnonKey: 'PEGA_TU_SUPABASE_ANON_KEY',
+            adminEmail: 'lorey4311@gmail.com', // unico correo permitido
+        };
+
+        let supabaseClient = null;
+        if (CONFIG.conectado) {
+            supabaseClient = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey);
+        }
+
+        // ================================================================
+        // REFERENCIAS DE LA INTERFAZ
+        // ================================================================
+        const loginForm = document.getElementById('login-form');
+        const btnEntrar = document.getElementById('btn-entrar');
+        const errorMsg = document.getElementById('error-msg');
+        const btnLogout = document.getElementById('btn-logout');
+        const banner = document.getElementById('banner-preparacion');
+
+        // Muestra el aviso honesto mientras no haya conexion
+        if (!CONFIG.conectado) banner.style.display = 'block';
+
+        function mostrarError(mensaje) {
+            errorMsg.textContent = mensaje;
+            errorMsg.style.display = 'block';
+        }
+
+        // ================================================================
+        // LOGIN (sin mentiras: sin conexion no entra nadie)
+        // ================================================================
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const email = document.getElementById('email').value.trim().toLowerCase();
+            const password = document.getElementById('password').value;
+
+            btnEntrar.textContent = 'Verificando...';
+            btnEntrar.disabled = true;
+            errorMsg.style.display = 'none';
+
+            if (!CONFIG.conectado || !supabaseClient) {
+                // Honesto: no hay base de datos todavia
+                btnEntrar.textContent = 'Iniciar Sesión';
+                btnEntrar.disabled = false;
+                mostrarError('Todavía no hay conexión con la base de datos. Se activa el 5 de octubre.');
+                return;
+            }
+
+            // ===== CEREBRO (se ejecuta solo con el interruptor activado) =====
+            const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            btnEntrar.textContent = 'Iniciar Sesión';
+            btnEntrar.disabled = false;
+
+            if (error || !data.user) {
+                mostrarError('Correo o contraseña incorrectos.');
+                return;
+            }
+            // Solo la dueña entra. Cualquier otra cuenta es rechazada.
+            if (data.user.email.toLowerCase() !== CONFIG.adminEmail) {
+                await supabaseClient.auth.signOut();
+                mostrarError('Esta oficina es solo para la dueña de Vextronis. 👑');
+                return;
+            }
+            mostrarPanelAdmin(data.user.email);
+        });
+
+        // Si ya habia sesion abierta (solo con el interruptor activado)
+        if (CONFIG.conectado && supabaseClient) {
+            supabaseClient.auth.getSession().then(({ data }) => {
+                const u = data.session?.user;
+                if (u && u.email.toLowerCase() === CONFIG.adminEmail) mostrarPanelAdmin(u.email);
+            });
+        }
+
+        // ================================================================
+        // PANEL
+        // ================================================================
+        function mostrarPanelAdmin(emailUsuario) {
+            document.getElementById('pantalla-login').style.display = 'none';
+            document.getElementById('panel-admin').style.display = 'block';
+            document.body.classList.add('modo-panel');
+            document.getElementById('mensaje-bienvenida').textContent =
+                `Bienvenida, ${emailUsuario}. Aquí está todo lo que pasa en Vextronis:`;
+            cargarDatos();
+        }
+
+        btnLogout.addEventListener('click', async () => {
+            if (supabaseClient) await supabaseClient.auth.signOut();
+            document.getElementById('pantalla-login').style.display = 'block';
+            document.getElementById('panel-admin').style.display = 'none';
+            document.body.classList.remove('modo-panel');
+            document.getElementById('email').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('error-msg').style.display = 'none';
+        });
+
+        // Pestañas
+        document.querySelectorAll('.tab-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('activa'));
+                document.querySelectorAll('.tab-seccion').forEach((s) => s.classList.remove('activa'));
+                btn.classList.add('activa');
+                document.getElementById('tab-' + btn.dataset.tab).classList.add('activa');
+            });
+        });
+
+        // ================================================================
+        // CEREBRO: CARGA DE DATOS REALES (se llena el 5 de octubre)
+        // ================================================================
+        // Estructura de tarjeta de reporte, lista para cuando lleguen datos:
+        function crearTarjetaReporte(reporte) {
+            return `
+            <div class="reporte-card prioridad-${reporte.prioridad}">
+                <div class="reporte-info">
+                    <h3>${reporte.usuario} <span class="badge badge-${reporte.prioridad}">${reporte.prioridad}</span></h3>
+                    <p>${reporte.motivo}</p>
+                </div>
+                <div class="acciones">
+                    <button class="btn-accion btn-restaurar" onclick="accionUsuario('${reporte.usuarioId}', 'restaurar')">Restaurar</button>
+                    <button class="btn-accion btn-banear" onclick="accionUsuario('${reporte.usuarioId}', 'banear')">Banear</button>
+                </div>
+            </div>`;
+        }
+
+        async function cargarDatos() {
+            if (!CONFIG.conectado || !supabaseClient) return; // cuerpo listo, cerebro el 5
+            // El 5 de octubre aqui se consultan las tablas reales de Supabase:
+            // reportes, usuarios, baneos y actividad. (Se escribe ese dia).
+        }
+
+        async function accionUsuario(usuarioId, tipo) {
+            if (!CONFIG.conectado || !supabaseClient) return;
+            // El 5 de octubre aqui se ejecuta Banear / Restaurar en Supabase.
+        }
+    </script>
+</body>
+</html>
