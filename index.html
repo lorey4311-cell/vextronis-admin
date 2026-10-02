@@ -519,9 +519,9 @@
         // Antes de esa fecha la pagina NO finge nada: avisa honestamente
         // que esta en preparacion y no deja entrar a nadie.
         const CONFIG = {
-            conectado: false,                 // <-- 5 de octubre: true
-            supabaseUrl: 'PEGA_TU_SUPABASE_URL',
-            supabaseAnonKey: 'PEGA_TU_SUPABASE_ANON_KEY',
+            conectado: false,                 // <-- 5 de octubre: true y listo
+            supabaseUrl: 'https://kahqjmlwrwaoouogsbwq.supabase.co',
+            supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthaHFqbWx3cndhb291b2dzYndxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2MTM1MTksImV4cCI6MjEwNDE4OTUxOX0.rTk6oPCzroQLxerTyhwoNvDVVyqJ7x8CviqtQReuK_c',
             adminEmail: 'vextronisoficial@gmail.com', // unico correo permitido
         };
 
@@ -627,32 +627,163 @@
         });
 
         // ================================================================
-        // CEREBRO: CARGA DE DATOS REALES (se llena el 5 de octubre)
+        // CEREBRO: CARGA Y ACCIONES REALES EN SUPABASE
+        // (Funciona en cuanto CONFIG.conectado = true, el 5 de octubre.
+        //  Requiere la migracion 20261002d_moderacion_reportes.sql aplicada.)
         // ================================================================
-        // Estructura de tarjeta de reporte, lista para cuando lleguen datos:
-        function crearTarjetaReporte(reporte) {
+
+        function esc(t) {
+            const d = document.createElement('div');
+            d.textContent = t == null ? '' : String(t);
+            return d.innerHTML;
+        }
+
+        function fmtFecha(iso) {
+            try {
+                return new Date(iso).toLocaleString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+            } catch { return iso; }
+        }
+
+        const NOMBRES_TIPO = { publicacion: 'Publicación del muro', estado: 'Estado', canal: 'Canal' };
+
+        // Cargar un avance del contenido reportado (solo el oficial puede verlo)
+        async function previewContenido(reporte) {
+            try {
+                if (reporte.tipo === 'publicacion' && reporte.id_publicacion) {
+                    const { data } = await supabaseClient.from('publicaciones')
+                        .select('mensaje, tipo_media').eq('id', reporte.id_publicacion).maybeSingle();
+                    return data ? (data.mensaje ? '“' + String(data.mensaje).slice(0, 80) + '”' : (data.tipo_media ? 'Contenido: ' + data.tipo_media : '')) : '(ya no existe)';
+                }
+                if (reporte.tipo === 'canal' && reporte.id_publicacion) {
+                    const { data } = await supabaseClient.from('canales')
+                        .select('nombre').eq('id', reporte.id_publicacion).maybeSingle();
+                    return data ? 'Canal: ' + data.nombre : '(ya no existe)';
+                }
+            } catch { }
+            return '';
+        }
+
+        async function crearTarjetaReporte(reporte) {
+            const seva = reporte.severidad || 'baja';
+            const prev = await previewContenido(reporte);
+            const idObj = reporte.tipo === 'estado' ? String(reporte.id_estado) : reporte.id_publicacion;
             return `
-            <div class="reporte-card prioridad-${reporte.prioridad}">
+            <div class="reporte-card prioridad-${seva}">
                 <div class="reporte-info">
-                    <h3>${reporte.usuario} <span class="badge badge-${reporte.prioridad}">${reporte.prioridad}</span></h3>
-                    <p>${reporte.motivo}</p>
+                    <h3>${esc(NOMBRES_TIPO[reporte.tipo] || reporte.tipo)} <span class="badge badge-${seva}">${seva}</span></h3>
+                    <p>${esc(reporte.motivo)}</p>
+                    ${prev ? `<p style="opacity:.75;font-size:12px;">${esc(prev)}</p>` : ''}
+                    <p style="opacity:.55;font-size:11px;">${esc(fmtFecha(reporte.creado_en))} · id ${esc(String(idObj).slice(0, 8))}</p>
                 </div>
                 <div class="acciones">
-                    <button class="btn-accion btn-restaurar" onclick="accionUsuario('${reporte.usuarioId}', 'restaurar')">Restaurar</button>
-                    <button class="btn-accion btn-banear" onclick="accionUsuario('${reporte.usuarioId}', 'banear')">Banear</button>
+                    <button class="btn-accion btn-restaurar" onclick="accionContenido('${reporte.tipo}', '${idObj}', 'restaurar')">Restaurar</button>
+                    <button class="btn-accion btn-banear" onclick="accionContenido('${reporte.tipo}', '${idObj}', 'ocultar')">Ocultar</button>
                 </div>
             </div>`;
         }
 
-        async function cargarDatos() {
-            if (!CONFIG.conectado || !supabaseClient) return; // cuerpo listo, cerebro el 5
-            // El 5 de octubre aqui se consultan las tablas reales de Supabase:
-            // reportes, usuarios, baneos y actividad. (Se escribe ese dia).
-        }
-
-        async function accionUsuario(usuarioId, tipo) {
+        // Ocultar / Restaurar contenido desde la Oficina (solo la oficial puede)
+        async function accionContenido(tipo, idObj, accion) {
             if (!CONFIG.conectado || !supabaseClient) return;
-            // El 5 de octubre aqui se ejecuta Banear / Restaurar en Supabase.
+            const tabla = tipo === 'estado' ? 'estados' : (tipo === 'canal' ? 'canales' : 'publicaciones');
+            const idNum = tipo === 'estado' ? Number(idObj) : idObj;
+            if (tipo === 'estado' && !Number.isInteger(idNum)) { alert('id inválido'); return; }
+            if (!confirm(accion === 'ocultar'
+                ? '¿Ocultar este contenido para toda la comunidad?'
+                : '¿Restaurar este contenido y descartar sus reportes?')) return;
+            try {
+                let r;
+                if (accion === 'ocultar') {
+                    r = await supabaseClient.from(tabla).update({
+                        estado: 'oculto', motivo_ocultado: 'Ocultado por la administradora desde La Oficina'
+                    }).eq('id', idNum);
+                } else {
+                    r = await supabaseClient.from(tabla).update({
+                        estado: 'activo', motivo_ocultado: null
+                    }).eq('id', idNum);
+                    if (!r.error) {
+                        // descartar los reportes de ese objeto
+                        const filtro = tipo === 'estado'
+                            ? { tipo: 'estado', id_estado: idNum }
+                            : { tipo, id_publicacion: idObj };
+                        await supabaseClient.from('reportes').delete().match(filtro);
+                    }
+                }
+                if (r.error) { alert('No se pudo: ' + r.error.message); return; }
+                cargarDatos();
+            } catch (e) { alert('Error inesperado: ' + e.message); }
+        }
+        window.accionContenido = accionContenido;
+
+        async function cargarDatos() {
+            if (!CONFIG.conectado || !supabaseClient) return;
+
+            // ---- Reportes (solo la oficial los ve, por RLS) ----
+            let reportes = [];
+            try {
+                const { data, error } = await supabaseClient.from('reportes')
+                    .select('*').order('creado_en', { ascending: false }).limit(30);
+                if (error) throw error;
+                reportes = data || [];
+            } catch (e) {
+                document.getElementById('lista-reportes').innerHTML =
+                    '<div class="estado-vacio">Todavía no se puede leer la tabla de reportes.<br><span style="font-size:12px;">(' + esc(e.message || 'sin permiso') + ')</span></div>';
+                reportes = null;
+            }
+
+            if (reportes) {
+                if (reportes.length === 0) {
+                    document.getElementById('lista-reportes').innerHTML =
+                        '<div class="estado-vacio">Ningún usuario ha reportado nada todavía. ¡Vextronis está en paz! ✨</div>';
+                } else {
+                    const html = [];
+                    for (const r of reportes.slice(0, 15)) html.push(await crearTarjetaReporte(r));
+                    document.getElementById('lista-reportes').innerHTML = html.join('');
+                }
+                // Tarjeta de resumen: reportes totales
+                document.getElementById('stat-reportes').textContent = reportes.length;
+                // Actividad hoy: reportes de hoy
+                const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+                document.getElementById('stat-actividad').textContent =
+                    reportes.filter(r => new Date(r.creado_en) >= hoy).length;
+            }
+
+            // ---- Usuarios (si la RLS lo permite a la cuenta oficial) ----
+            try {
+                const { data, error } = await supabaseClient.from('usuarios')
+                    .select('id, nombre, apellidos, foto_perfil_url, es_oficial, created_at')
+                    .order('created_at', { ascending: false }).limit(50);
+                if (error) throw error;
+                const us = data || [];
+                document.getElementById('stat-usuarios').textContent = us.length >= 50 ? '50+' : us.length;
+                document.getElementById('lista-usuarios').innerHTML = us.length === 0
+                    ? '<div class="estado-vacio">Aún no hay usuarios registrados.</div>'
+                    : us.map(u => `
+                    <div class="reporte-card prioridad-media">
+                        <div class="reporte-info">
+                            <h3>${esc((u.nombre || 'Sin nombre') + ' ' + (u.apellidos || ''))} ${u.es_oficial ? '<span class="badge badge-alta">Oficial</span>' : ''}</h3>
+                            <p style="opacity:.6;font-size:12px;">Se unió: ${esc(fmtFecha(u.created_at))}</p>
+                        </div>
+                    </div>`).join('');
+            } catch (e) {
+                document.getElementById('lista-usuarios').innerHTML =
+                    '<div class="estado-vacio">La base de datos no deja ver la lista de usuarios con esta cuenta (así es más seguro).<br><span style="font-size:12px;">Se puede abrir una política solo para la oficial el 5 de octubre.</span></div>';
+            }
+
+            // ---- Actividad: los reportes recientes como línea de tiempo ----
+            if (reportes && reportes.length > 0) {
+                document.getElementById('lista-actividad').innerHTML = reportes.slice(0, 12).map(r => `
+                    <div class="reporte-card prioridad-baja">
+                        <div class="reporte-info">
+                            <h3>${esc(NOMBRES_TIPO[r.tipo] || r.tipo)}</h3>
+                            <p>${esc(r.motivo)} (${esc(r.severidad)})</p>
+                            <p style="opacity:.55;font-size:11px;">${esc(fmtFecha(r.creado_en))}</p>
+                        </div>
+                    </div>`).join('');
+            } else if (reportes) {
+                document.getElementById('lista-actividad').innerHTML =
+                    '<div class="estado-vacio">Cuando haya reportes o actividad, aparecerá aquí.</div>';
+            }
         }
     </script>
 </body>
