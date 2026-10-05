@@ -644,11 +644,18 @@
             } catch { return iso; }
         }
 
-        const NOMBRES_TIPO = { publicacion: 'Publicación del muro', estado: 'Estado', canal: 'Canal' };
+        const NOMBRES_TIPO = { publicacion: 'Publicación del muro', estado: 'Estado', canal: 'Canal', usuario: 'Usuario reportado' };
 
         // Cargar un avance del contenido reportado (solo el oficial puede verlo)
         async function previewContenido(reporte) {
             try {
+                if (reporte.tipo === 'usuario' && reporte.id_usuario_reportado) {
+                    const { data } = await supabaseClient.from('usuarios')
+                        .select('nombre, apellidos, shadowbanned, trust_score').eq('id', reporte.id_usuario_reportado).maybeSingle();
+                    return data
+                        ? 'Persona: ' + (data.nombre || '?') + (data.shadowbanned ? ' · 🚫 con shadowban' : ' · confianza ' + (data.trust_score ?? 100))
+                        : '(la cuenta ya no existe)';
+                }
                 if (reporte.tipo === 'publicacion' && reporte.id_publicacion) {
                     const { data } = await supabaseClient.from('publicaciones')
                         .select('mensaje, tipo_media').eq('id', reporte.id_publicacion).maybeSingle();
@@ -666,7 +673,14 @@
         async function crearTarjetaReporte(reporte) {
             const seva = reporte.severidad || 'baja';
             const prev = await previewContenido(reporte);
-            const idObj = reporte.tipo === 'estado' ? String(reporte.id_estado) : reporte.id_publicacion;
+            const idObj = reporte.tipo === 'estado' ? String(reporte.id_estado)
+                : (reporte.tipo === 'usuario' ? reporte.id_usuario_reportado : reporte.id_publicacion);
+            const acciones = reporte.tipo === 'usuario'
+                ? `<button class="btn-accion btn-banear" onclick="accionUsuario('${idObj}', true)">🚫 Shadowban</button>
+                   <button class="btn-accion btn-restaurar" onclick="accionUsuario('${idObj}', false)">Quitar</button>
+                   <button class="btn-accion" style="background:#3A7BD5;" onclick="accionDescartarReporte('${reporte.id}')">Descartar</button>`
+                : `<button class="btn-accion btn-restaurar" onclick="accionContenido('${reporte.tipo}', '${idObj}', 'restaurar')">Restaurar</button>
+                   <button class="btn-accion btn-banear" onclick="accionContenido('${reporte.tipo}', '${idObj}', 'ocultar')">Ocultar</button>`;
             return `
             <div class="reporte-card prioridad-${seva}">
                 <div class="reporte-info">
@@ -675,10 +689,7 @@
                     ${prev ? `<p style="opacity:.75;font-size:12px;">${esc(prev)}</p>` : ''}
                     <p style="opacity:.55;font-size:11px;">${esc(fmtFecha(reporte.creado_en))} · id ${esc(String(idObj).slice(0, 8))}</p>
                 </div>
-                <div class="acciones">
-                    <button class="btn-accion btn-restaurar" onclick="accionContenido('${reporte.tipo}', '${idObj}', 'restaurar')">Restaurar</button>
-                    <button class="btn-accion btn-banear" onclick="accionContenido('${reporte.tipo}', '${idObj}', 'ocultar')">Ocultar</button>
-                </div>
+                <div class="acciones">${acciones}</div>
             </div>`;
         }
 
@@ -714,6 +725,34 @@
             } catch (e) { alert('Error inesperado: ' + e.message); }
         }
         window.accionContenido = accionContenido;
+
+        // Moderar usuarios: shadowban / quitarlo / restablecer confianza.
+        // Usa la función RPC vex_moderar_usuario: si no eres la oficial, la base lo rechaza.
+        async function accionUsuario(idUsuario, banear) {
+            if (!CONFIG.conectado || !supabaseClient) return;
+            if (!confirm(banear
+                ? '¿Aplicar shadowban? Su contenido del muro, estados y canales desaparecerá para la comunidad (nadie recibe aviso).'
+                : '¿Quitar el shadowban? Su contenido volverá a ser visible.')) return;
+            try {
+                const { error } = await supabaseClient.rpc('vex_moderar_usuario', {
+                    p_usuario: idUsuario, p_shadowban: banear, p_trust: null
+                });
+                if (error) { alert('No se pudo: ' + error.message); return; }
+                cargarDatos();
+            } catch (e) { alert('Error inesperado: ' + e.message); }
+        }
+        window.accionUsuario = accionUsuario;
+
+        async function accionDescartarReporte(idReporte) {
+            if (!CONFIG.conectado || !supabaseClient) return;
+            if (!confirm('¿Descartar este reporte? (el historial queda en el expediente)')) return;
+            try {
+                const { error } = await supabaseClient.from('reportes').delete().eq('id', idReporte);
+                if (error) { alert('No se pudo: ' + error.message); return; }
+                cargarDatos();
+            } catch (e) { alert('Error inesperado: ' + e.message); }
+        }
+        window.accionDescartarReporte = accionDescartarReporte;
 
         async function cargarDatos() {
             if (!CONFIG.conectado || !supabaseClient) return;
@@ -751,7 +790,7 @@
             // ---- Usuarios (si la RLS lo permite a la cuenta oficial) ----
             try {
                 const { data, error } = await supabaseClient.from('usuarios')
-                    .select('id, nombre, apellidos, foto_perfil_url, es_oficial, created_at')
+                    .select('id, nombre, apellidos, foto_perfil_url, es_oficial, created_at, trust_score, shadowbanned')
                     .order('created_at', { ascending: false }).limit(50);
                 if (error) throw error;
                 const us = data || [];
@@ -759,10 +798,15 @@
                 document.getElementById('lista-usuarios').innerHTML = us.length === 0
                     ? '<div class="estado-vacio">Aún no hay usuarios registrados.</div>'
                     : us.map(u => `
-                    <div class="reporte-card prioridad-media">
+                    <div class="reporte-card prioridad-${u.shadowbanned ? 'alta' : 'media'}">
                         <div class="reporte-info">
-                            <h3>${esc((u.nombre || 'Sin nombre') + ' ' + (u.apellidos || ''))} ${u.es_oficial ? '<span class="badge badge-alta">Oficial</span>' : ''}</h3>
-                            <p style="opacity:.6;font-size:12px;">Se unió: ${esc(fmtFecha(u.created_at))}</p>
+                            <h3>${esc((u.nombre || 'Sin nombre') + ' ' + (u.apellidos || ''))} ${u.es_oficial ? '<span class="badge badge-alta">Oficial</span>' : ''}${u.shadowbanned ? ' <span class="badge badge-alta">🚫 shadowban</span>' : ''}</h3>
+                            <p style="opacity:.6;font-size:12px;">Confianza: <b>${u.trust_score ?? 100}</b> · Se unió: ${esc(fmtFecha(u.created_at))}</p>
+                        </div>
+                        <div class="acciones">
+                            ${u.es_oficial ? '' : (u.shadowbanned
+                                ? `<button class="btn-accion btn-restaurar" onclick="accionUsuario('${u.id}', false)">Quitar shadowban</button>`
+                                : `<button class="btn-accion btn-banear" onclick="accionUsuario('${u.id}', true)">🚫 Shadowban</button>`)}
                         </div>
                     </div>`).join('');
             } catch (e) {
@@ -770,21 +814,64 @@
                     '<div class="estado-vacio">La base de datos no deja ver la lista de usuarios con esta cuenta (así es más seguro).<br><span style="font-size:12px;">Se puede abrir una política solo para la oficial el 5 de octubre.</span></div>';
             }
 
-            // ---- Actividad: los reportes recientes como línea de tiempo ----
-            if (reportes && reportes.length > 0) {
-                document.getElementById('lista-actividad').innerHTML = reportes.slice(0, 12).map(r => `
-                    <div class="reporte-card prioridad-baja">
-                        <div class="reporte-info">
-                            <h3>${esc(NOMBRES_TIPO[r.tipo] || r.tipo)}</h3>
-                            <p>${esc(r.motivo)} (${esc(r.severidad)})</p>
-                            <p style="opacity:.55;font-size:11px;">${esc(fmtFecha(r.creado_en))}</p>
-                        </div>
-                    </div>`).join('');
-            } else if (reportes) {
-                document.getElementById('lista-actividad').innerHTML =
-                    '<div class="estado-vacio">Cuando haya reportes o actividad, aparecerá aquí.</div>';
-            }
+            // ---- Actividad: EXPEDIENTE (audit_log) + ALERTAS SILENCIOSAS ----
+            let htmlActividad = '';
+
+            // Expediente policial: cada reporte enviado queda registrado aquí
+            try {
+                const { data: auditoria, error: errAud } = await supabaseClient.from('audit_log')
+                    .select('*').order('creado_en', { ascending: false }).limit(20);
+                if (errAud) throw errAud;
+                const aud = auditoria || [];
+                if (aud.length > 0) {
+                    htmlActividad += '<h3 style="margin:10px 4px;font-size:14px;">📜 Expediente (reportes)</h3>' +
+                        aud.map(a => `
+                        <div class="reporte-card prioridad-baja">
+                            <div class="reporte-info">
+                                <h3>${esc(a.accion)}</h3>
+                                <p>${esc(a.detalles || '')}</p>
+                                <p style="opacity:.55;font-size:11px;">${esc(fmtFecha(a.creado_en))}</p>
+                            </div>
+                        </div>`).join('');
+                }
+            } catch (e) { /* sin permiso aún */ }
+
+            // Alertas silenciosas (comportamiento sospechoso)
+            try {
+                const { data: alertas, error: errAl } = await supabaseClient.from('alertas_silenciosas')
+                    .select('*').order('creado_en', { ascending: false }).limit(20);
+                if (errAl) throw errAl;
+                const al = alertas || [];
+                if (al.length > 0) {
+                    htmlActividad += '<h3 style="margin:10px 4px;font-size:14px;">🕵️ Alertas silenciosas</h3>' +
+                        al.map(a => `
+                        <div class="reporte-card prioridad-${a.leida ? 'baja' : 'alta'}">
+                            <div class="reporte-info">
+                                <h3>${esc(a.tipo_alerta)} ${a.leida ? '' : '<span class="badge badge-alta">nueva</span>'}</h3>
+                                <p>${esc(a.descripcion)}</p>
+                                <p style="opacity:.55;font-size:11px;">${esc(fmtFecha(a.creado_en))}</p>
+                            </div>
+                            <div class="acciones">
+                                ${a.leida ? '' : `<button class="btn-accion btn-restaurar" onclick="accionMarcarAlerta('${a.id}')">Vista</button>`}
+                            </div>
+                        </div>`).join('');
+                }
+            } catch (e) { /* sin permiso aún */ }
+
+            document.getElementById('lista-actividad').innerHTML = htmlActividad ||
+                '<div class="estado-vacio">Cuando haya reportes, expediente o alertas, aparecerá aquí.</div>';
         }
+
+        async function accionMarcarAlerta(idAlerta) {
+            if (!CONFIG.conectado || !supabaseClient) return;
+            try {
+                const { error } = await supabaseClient.from('alertas_silenciosas')
+                    .update({ leida: true }).eq('id', idAlerta);
+                if (error) { alert('No se pudo: ' + error.message); return; }
+                cargarDatos();
+            } catch (e) { alert('Error inesperado: ' + e.message); }
+        }
+        window.accionMarcarAlerta = accionMarcarAlerta;
     </script>
 </body>
 </html>
