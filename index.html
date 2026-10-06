@@ -708,6 +708,13 @@
                     r = await supabaseClient.from(tabla).update({
                         estado: 'oculto', motivo_ocultado: 'Ocultado por la administradora desde La Oficina'
                     }).eq('id', idNum);
+                    if (!r.error) {
+                        // Ocultar tambien resuelve el reporte: sacarlo de la cola pendiente
+                        const filtro = tipo === 'estado'
+                            ? { tipo: 'estado', id_estado: idNum }
+                            : { tipo, id_publicacion: idObj };
+                        await supabaseClient.from('reportes').delete().match(filtro);
+                    }
                 } else {
                     r = await supabaseClient.from(tabla).update({
                         estado: 'activo', motivo_ocultado: null
