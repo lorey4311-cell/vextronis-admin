@@ -18,9 +18,9 @@
             --azul-marino: #1E4D8C;
             --azul-oscuro: #0f2a52;
             --blanco: #FFFFFF;
-            --fondo-principal: #0d1117;
-            --fondo-secundario: #161b22;
-            --fondo-terciario: #21262d;
+            --fondo-principal: #0A0E18;
+            --fondo-secundario: #131a29;
+            --fondo-terciario: #1d2740;
             --texto-secundario: #8b949e;
             --rojo-alerta: #ff4d4d;
             --verde-exito: #4caf50;
@@ -400,6 +400,32 @@
             .login-container { margin: 20px; }
             .nota-desactivado { text-align: left; }
         }
+    
+        /* ===== EXPEDIENTE 360 Y BUSCADOR (regla de la jefa, 15-10-2026) ===== */
+        .barra-busqueda { position: relative; max-width: 540px; margin: 0 auto 14px; }
+        .barra-busqueda .lupa { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); opacity: .6; font-size: 14px; pointer-events: none; }
+        #buscar-expediente { width: 100%; padding: 11px 16px 11px 40px; border-radius: 9999px; border: 1px solid var(--fondo-terciario); background: var(--fondo-secundario); color: #fff; font-size: 14px; outline: none; }
+        #buscar-expediente:focus { border-color: var(--azul-medio); }
+        .resultados-busqueda { max-width: 540px; margin: 0 auto 10px; display: flex; flex-direction: column; gap: 8px; }
+        .usuario-resultado { display: flex; align-items: center; gap: 10px; background: var(--fondo-secundario); border: 1px solid var(--fondo-terciario); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+        .usuario-resultado:hover { border-color: var(--azul-medio); }
+        .usuario-resultado img, .avatar-caida { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; background: var(--azul-marino); display: flex; align-items: center; justify-content: center; font-weight: 700; flex: none; }
+        .tarjeta-360 { background: var(--fondo-secundario); border: 1px solid var(--fondo-terciario); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+        .subtabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 12px; }
+        .subtab-btn { padding: 7px 14px; border-radius: 9999px; background: var(--fondo-secundario); border: 1px solid var(--fondo-terciario); color: var(--texto-secundario); cursor: pointer; font-size: 12px; }
+        .subtab-btn:hover { border-color: var(--azul-medio); }
+        .subtab-btn.activa { background: linear-gradient(135deg, var(--azul-cielo), var(--azul-medio)); color: #fff; border-color: transparent; }
+        .media-thumb { max-width: 190px; max-height: 150px; border-radius: 10px; cursor: zoom-in; object-fit: cover; border: 1px solid var(--fondo-terciario); display: block; margin: 6px 0; }
+        .audio-mini { width: 230px; max-width: 100%; display: block; margin: 6px 0; }
+        .dato-resumen { display: flex; justify-content: space-between; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--fondo-terciario); font-size: 13px; }
+        .dato-resumen:last-child { border-bottom: none; }
+        .etiqueta-seccion { margin: 16px 4px 8px; font-size: 13px; color: var(--azul-cielo); font-weight: 600; }
+        #lightbox { position: fixed; inset: 0; background: rgba(0, 0, 0, .93); display: none; align-items: center; justify-content: center; z-index: 50; cursor: zoom-out; }
+        #lightbox img, #lightbox video { max-width: 94vw; max-height: 88vh; border-radius: 12px; }
+        .btn-aprobar { background: #1d4d2b !important; }
+        .btn-eliminar { background: #7a1f1f !important; }
+        .btn-listanegra { background: #7a4a1f !important; }
+        .badge-suave { background: var(--fondo-terciario); color: var(--texto-secundario); padding: 2px 8px; border-radius: 9999px; font-size: 10px; margin-left: 4px; }
     </style>
 </head>
 <body>
@@ -450,6 +476,14 @@
             <p id="mensaje-bienvenida">Bienvenida, jefa.</p>
         </header>
 
+
+        <!-- Buscador de expedientes (la misma lupa de la pestaña de chats) -->
+        <div class="barra-busqueda">
+            <span class="lupa">🔍</span>
+            <input type="search" id="buscar-expediente" placeholder="Buscar expediente por nombre, usuario o teléfono" autocomplete="off">
+        </div>
+        <div class="resultados-busqueda" id="resultados-busqueda" style="display:none;"></div>
+
         <!-- Resumen general -->
         <div class="stats-container">
             <div class="stat-card">
@@ -475,6 +509,7 @@
             <button class="tab-btn activa" data-tab="reportes">Reportes</button>
             <button class="tab-btn" data-tab="usuarios">Usuarios</button>
             <button class="tab-btn" data-tab="actividad">Actividad</button>
+            <button class="tab-btn" data-tab="expediente">Expediente 360</button>
         </div>
 
         <!-- Seccion: Reportes -->
@@ -508,7 +543,18 @@
                 </div>
             </div>
         </div>
+
+        <!-- Seccion: Expediente 360 (regla de la jefa, 15-10-2026) -->
+        <div class="tab-seccion" id="tab-expediente">
+            <div id="expediente-vacio" class="estado-vacio">
+                Busca a una persona arriba con la lupa 🔍 y aquí se abrirá su expediente completo 360°:
+                publicaciones, estados, chats, comentarios, notificaciones y reportes.
+            </div>
+            <div id="expediente-contenido" style="display:none;"></div>
+        </div>
     </div>
+
+    <div id="lightbox" onclick="cerrarLightbox()"></div>
 
     <script>
         // ================================================================
@@ -814,6 +860,7 @@
                             ${u.es_oficial ? '' : (u.shadowbanned
                                 ? `<button class="btn-accion btn-restaurar" onclick="accionUsuario('${u.id}', false)">Quitar shadowban</button>`
                                 : `<button class="btn-accion btn-banear" onclick="accionUsuario('${u.id}', true)">🚫 Shadowban</button>`)}
+                            <button class="btn-accion" style="background:#3A7BD5;" onclick="abrirExpediente('${u.id}')">📁 Expediente 360</button>
                         </div>
                     </div>`).join('');
             } catch (e) {
@@ -879,6 +926,436 @@
             } catch (e) { alert('Error inesperado: ' + e.message); }
         }
         window.accionMarcarAlerta = accionMarcarAlerta;
+
+        // ================================================================
+        // EXPEDIENTE 360 Y MODERACION AVANZADA (regla de la jefa, 15-10-2026)
+        // Usa las vistas v_oficina_* de Supabase: SOLO la cuenta oficial
+        // puede leerlas (la base lo exige). No se toca nada de lo que ya
+        // existia: esto es puro agregado.
+        // ================================================================
+
+        const inputBuscar = document.getElementById('buscar-expediente');
+        const cajaResultados = document.getElementById('resultados-busqueda');
+        let usuarioExpediente = null;
+        let subtabActual = 'resumen';
+        let temporizadorBusqueda = null;
+
+        const NOMBRES_SUBTAB = {
+            resumen: '📋 Resumen',
+            muro: '🧱 Muro y Canales',
+            estados: '✨ Estados',
+            chats: '💬 Chats (auditoría)',
+            comentarios: '💬 Comentarios y Notificaciones',
+            reportes: '🚨 Historial de Reportes',
+        };
+
+        const ETIQUETA_STATUS = { pending: 'Pendiente', reviewed: 'Revisado', dismissed: 'Descartado' };
+
+        function activarTabOficina(nombre) {
+            document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('activa'));
+            document.querySelectorAll('.tab-seccion').forEach((s) => s.classList.remove('activa'));
+            const btn = document.querySelector('.tab-btn[data-tab="' + nombre + '"]');
+            if (btn) btn.classList.add('activa');
+            const sec = document.getElementById('tab-' + nombre);
+            if (sec) sec.classList.add('activa');
+        }
+
+        // ---- Buscador (la misma lupa de la pestaña de chats) ----
+        async function buscarExpediente(termino) {
+            if (!supabaseClient || !termino || termino.trim().length < 2) {
+                cajaResultados.style.display = 'none';
+                cajaResultados.innerHTML = '';
+                return;
+            }
+            const q = termino.trim();
+            const { data, error } = await supabaseClient.from('usuarios')
+                .select('id, nombre, apellidos, username, telefono, foto_perfil_url, es_oficial, shadowbanned')
+                .or('nombre.ilike.%' + q + '%,apellidos.ilike.%' + q + '%,username.ilike.%' + q + '%,telefono.ilike.%' + q + '%')
+                .limit(10);
+            if (error || !data || data.length === 0) {
+                cajaResultados.style.display = 'block';
+                cajaResultados.innerHTML = '<div class="estado-vacio">Nadie coincide con &ldquo;' + esc(q) + '&rdquo;.</div>';
+                return;
+            }
+            cajaResultados.style.display = 'block';
+            cajaResultados.innerHTML = data.map((u) => `
+                <div class="usuario-resultado" onclick="abrirExpediente('${u.id}')">
+                    ${u.foto_perfil_url
+                        ? `<img src="${esc(u.foto_perfil_url)}" alt="" onerror="this.style.visibility='hidden'">`
+                        : `<div class="avatar-caida">${esc((u.nombre || '?').charAt(0).toUpperCase())}</div>`}
+                    <div style="flex:1;min-width:0;">
+                        <b>${esc((u.nombre || 'Sin nombre') + ' ' + (u.apellidos || ''))}</b>
+                        <div style="font-size:12px;color:var(--texto-secundario);">${esc(u.username ? '@' + u.username : (u.telefono || ''))}</div>
+                    </div>
+                    ${u.shadowbanned ? '<span class="badge badge-alta">🚫 shadowban</span>' : ''}
+                    ${u.es_oficial ? '<span class="badge badge-alta">Oficial</span>' : ''}
+                </div>`).join('');
+        }
+
+        if (inputBuscar) {
+            inputBuscar.addEventListener('input', () => {
+                clearTimeout(temporizadorBusqueda);
+                temporizadorBusqueda = setTimeout(() => buscarExpediente(inputBuscar.value), 300);
+            });
+        }
+
+        // ---- Abrir expediente ----
+        async function abrirExpediente(idUsuario) {
+            if (!supabaseClient) return;
+            cajaResultados.style.display = 'none';
+            const { data, error } = await supabaseClient.from('usuarios').select('*').eq('id', idUsuario).maybeSingle();
+            if (error || !data) { alert('No se pudo abrir el expediente.'); return; }
+            usuarioExpediente = data;
+            activarTabOficina('expediente');
+            document.getElementById('expediente-vacio').style.display = 'none';
+            const cont = document.getElementById('expediente-contenido');
+            cont.style.display = 'block';
+            cont.innerHTML = '<div class="estado-vacio">Abriendo expediente…</div>';
+            subtabActual = 'resumen';
+            pintarCabeceraExpediente();
+            await cargarSubtab();
+        }
+        window.abrirExpediente = abrirExpediente;
+
+        async function refrescarUsuarioExpediente() {
+            if (!usuarioExpediente) return;
+            const { data } = await supabaseClient.from('usuarios').select('*').eq('id', usuarioExpediente.id).maybeSingle();
+            if (data) usuarioExpediente = data;
+            pintarCabeceraExpediente();
+            await cargarSubtab();
+        }
+
+        function pintarCabeceraExpediente() {
+            const u = usuarioExpediente;
+            document.getElementById('expediente-contenido').innerHTML = `
+            <div class="tarjeta-360" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+                <div style="width:64px;height:64px;border-radius:50%;overflow:hidden;background:var(--azul-marino);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;flex:none;">
+                    ${u.foto_perfil_url
+                        ? `<img src="${esc(u.foto_perfil_url)}" style="width:100%;height:100%;object-fit:cover;">`
+                        : esc((u.nombre || '?').charAt(0).toUpperCase())}
+                </div>
+                <div style="flex:1;min-width:220px;">
+                    <h2 style="margin:0;font-size:18px;">${esc((u.nombre || '') + ' ' + (u.apellidos || ''))}
+                        ${u.es_oficial ? '<span class="badge badge-alta">Oficial</span>' : ''}
+                        ${u.shadowbanned ? ' <span class="badge badge-alta">🚫 suspendida en silencio</span>' : ''}
+                    </h2>
+                    <p style="margin:4px 0 0;font-size:12px;color:var(--texto-secundario);">
+                        ID ${esc(u.id)}${u.username ? ' · @' + esc(u.username) : ''}${u.telefono ? ' · ' + esc(u.telefono) : ''}
+                    </p>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    ${u.es_oficial ? '' : (u.shadowbanned
+                        ? `<button class="btn-accion btn-restaurar" onclick="accionExpedienteUsuario(false)">Quitar suspensión</button>`
+                        : `<button class="btn-accion btn-banear" onclick="accionExpedienteUsuario(true)">🚫 Suspender en silencio</button>`)}
+                </div>
+            </div>
+            <div class="subtabs">
+                ${Object.keys(NOMBRES_SUBTAB).map((k) =>
+                    `<button class="subtab-btn${k === subtabActual ? ' activa' : ''}" onclick="cambiarSubtab('${k}')">${NOMBRES_SUBTAB[k]}</button>`).join('')}
+            </div>
+            <div id="subtab-contenido"><div class="estado-vacio">Cargando…</div></div>`;
+        }
+
+        async function cambiarSubtab(k) {
+            subtabActual = k;
+            pintarCabeceraExpediente();
+            await cargarSubtab();
+        }
+        window.cambiarSubtab = cambiarSubtab;
+
+        async function cargarSubtab() {
+            const caja = document.getElementById('subtab-contenido');
+            if (!caja) return;
+            try {
+                if (subtabActual === 'resumen') await subtabResumen(caja);
+                else if (subtabActual === 'muro') await subtabMuro(caja);
+                else if (subtabActual === 'estados') await subtabEstados(caja);
+                else if (subtabActual === 'chats') await subtabChats(caja);
+                else if (subtabActual === 'comentarios') await subtabComentarios(caja);
+                else if (subtabActual === 'reportes') await subtabReportes(caja);
+            } catch (e) {
+                caja.innerHTML = '<div class="estado-vacio">No se pudo cargar esta parte del expediente.<br><span style="font-size:12px;">(' + esc(e.message || 'sin permiso') + ')</span></div>';
+            }
+        }
+
+        // ---- Resumen ----
+        async function subtabResumen(caja) {
+            const id = usuarioExpediente.id;
+            const [{ data: res }, { data: dp }] = await Promise.all([
+                supabaseClient.from('v_oficina_resumen').select('*').eq('usuario_id', id).maybeSingle(),
+                supabaseClient.from('datos_personales').select('*').eq('user_id', id).maybeSingle(),
+            ]);
+            const u = usuarioExpediente;
+            const filas = [
+                ['Nombre completo', (u.nombre || '') + ' ' + (u.apellidos || '')],
+                ['Usuario', u.username ? '@' + u.username : '—'],
+                ['Teléfono', u.telefono || '—'],
+                ['Fecha de registro', u.created_at ? fmtFecha(u.created_at) : '—'],
+                ['Cumpleaños', dp && dp.fecha_nacimiento ? dp.fecha_nacimiento : '—'],
+                ['Género', dp && dp.genero ? dp.genero : '—'],
+                ['Dirección IP', 'No registrada (Vextronis todavía no guarda IPs)'],
+                ['Confianza', String(u.trust_score ?? 100) + ' / 100'],
+                ['Cuenta suspendida en silencio', u.shadowbanned ? 'SÍ (shadowban)' : 'No'],
+            ];
+            if (res) filas.push(
+                ['Publicaciones en Muro y Canales', String(res.total_publicaciones) + (res.publicaciones_marcadas ? ' (' + res.publicaciones_marcadas + ' marcadas para moderación)' : '')],
+                ['Comentarios', String(res.total_comentarios)],
+                ['Estados individuales', String(res.total_estados)],
+                ['Estados de grupo', String(res.total_estados_grupo)],
+                ['Mensajes de chat', String(res.total_mensajes)],
+                ['Mensajes en grupos', String(res.total_mensajes_grupo)],
+                ['Reportes recibidos', String(res.reportes_recibidos)],
+                ['Reportes hechos por ella', String(res.reportes_hechos)],
+            );
+            caja.innerHTML = '<div class="tarjeta-360">' + filas.map((f) =>
+                `<div class="dato-resumen"><span style="color:var(--texto-secundario);">${esc(f[0])}</span><b>${esc(String(f[1]))}</b></div>`).join('') + '</div>';
+        }
+
+        // ---- Ayudas de multimedia (visor de la oficina) ----
+        function htmlMedia(o) {
+            const tipo = (o.tipo_media || o.tipo || '').toLowerCase();
+            if (o.youtube_id) {
+                return `<div style="margin:6px 0;"><span class="badge-suave">🎬 YouTube</span>
+                    <button class="btn-accion" style="background:#3A7BD5;" onclick="verYouTube('${esc(o.youtube_id)}')">Ver video</button></div>`;
+            }
+            if (!o.media_url) return '';
+            const u = esc(o.media_url);
+            if (tipo === 'sticker' || tipo === 'imagen' || tipo === 'image' || /\.(jpe?g|png|webp|gif)(\?|$)/i.test(o.media_url)) {
+                return `<img src="${u}" class="media-thumb" onclick="verLightbox('${u}')">`;
+            }
+            if (tipo === 'video' || /\.(mp4|webm|mov)(\?|$)/i.test(o.media_url)) {
+                return `<video src="${u}" class="media-thumb" controls preload="metadata"></video>`;
+            }
+            if (tipo === 'audio' || /\.(mp3|ogg|m4a|wav|aac)(\?|$)/i.test(o.media_url)) {
+                return `<audio src="${u}" controls class="audio-mini"></audio>`;
+            }
+            return `<a href="${o.media_url}" target="_blank" rel="noopener" style="color:var(--azul-cielo);font-size:12px;">📎 Abrir archivo</a>`;
+        }
+
+        function verLightbox(url) {
+            const lb = document.getElementById('lightbox');
+            lb.innerHTML = '<img src="' + esc(url) + '">';
+            lb.style.display = 'flex';
+        }
+        function verYouTube(id) {
+            const lb = document.getElementById('lightbox');
+            lb.innerHTML = '<iframe width="min(94vw,880px)" height="70%" src="https://www.youtube.com/embed/' + esc(id) + '" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>';
+            lb.style.display = 'flex';
+        }
+        function cerrarLightbox() {
+            const lb = document.getElementById('lightbox');
+            lb.style.display = 'none';
+            lb.innerHTML = '';
+        }
+        window.verLightbox = verLightbox;
+        window.verYouTube = verYouTube;
+        window.cerrarLightbox = cerrarLightbox;
+
+        // ---- Muro y Canales ----
+        function botonesPublicacion(p) {
+            return `
+            <button class="btn-accion btn-aprobar" onclick="aprobarPublicacion('${p.id}')">✔ Aprobar publicación</button>
+            <button class="btn-accion btn-eliminar" onclick="eliminarPublicacion('${p.id}')">🗑 Eliminar publicación</button>
+            ${p.media_url ? `<button class="btn-accion btn-listanegra" onclick="listaNegraPublicacion('${p.id}')">🚫 Añadir a Lista Negra</button>` : ''}
+            ${usuarioExpediente && !usuarioExpediente.es_oficial ? `<button class="btn-accion btn-banear" onclick="accionExpedienteUsuario(true)">🚫 Banear cuenta</button>` : ''}`;
+        }
+
+        async function subtabMuro(caja) {
+            const { data, error } = await supabaseClient.from('v_oficina_publicaciones')
+                .select('*').eq('usuario_id', usuarioExpediente.id).order('created_at', { ascending: false }).limit(60);
+            if (error) throw error;
+            const ps = data || [];
+            if (ps.length === 0) { caja.innerHTML = '<div class="estado-vacio">No ha publicado nada en el Muro ni en Canales.</div>'; return; }
+            caja.innerHTML = ps.map((p) => `
+                <div class="tarjeta-360">
+                    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;">
+                        <div>
+                            ${p.canal_id ? '<span class="badge-suave">📢 Canal</span>' : '<span class="badge-suave">🧱 Muro</span>'}
+                            ${p.estado === 'oculto' ? '<span class="badge badge-alta">Oculto</span>' : ''}
+                            ${p.moderation_status && p.moderation_status !== 'active' ? `<span class="badge badge-alta">Moderación: ${esc(p.moderation_status)}</span>` : ''}
+                            ${p.is_nsfw ? '<span class="badge badge-alta">NSFW</span>' : ''}
+                        </div>
+                        <span style="font-size:11px;color:var(--texto-secundario);">${esc(fmtFecha(p.created_at))}</span>
+                    </div>
+                    ${p.mensaje ? `<p style="margin:8px 0 0;white-space:pre-wrap;">${esc(p.mensaje)}</p>` : ''}
+                    ${htmlMedia(p)}
+                    <div class="acciones" style="margin-top:8px;">${botonesPublicacion(p)}</div>
+                </div>`).join('');
+        }
+
+        // ---- Estados (individuales y de grupo; viven 24 h) ----
+        async function subtabEstados(caja) {
+            const [ind, gru] = await Promise.all([
+                supabaseClient.from('v_oficina_estados').select('*').eq('user_id', usuarioExpediente.id).order('created_at', { ascending: false }).limit(30),
+                supabaseClient.from('v_oficina_estados_grupo').select('*').eq('autor_id', usuarioExpediente.id).order('created_at', { ascending: false }).limit(30),
+            ]);
+            if (ind.error) throw ind.error;
+            if (gru.error) throw gru.error;
+            let html = '';
+            const lista = [
+                ...(ind.data || []).map((e) => ({ ...e, etiqueta: '✨ Estado' })),
+                ...(gru.data || []).map((e) => ({ ...e, etiqueta: '👥 Estado de grupo' })),
+            ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            if (lista.length === 0) html = '<div class="estado-vacio">Sin estados vivos (viven 24 horas y luego se purgan solos).</div>';
+            else html = lista.map((e) => `
+                <div class="tarjeta-360">
+                    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+                        <span class="badge-suave">${e.etiqueta}</span>
+                        <span style="font-size:11px;color:var(--texto-secundario);">${esc(fmtFecha(e.created_at))}</span>
+                    </div>
+                    ${e.contenido ? `<p style="margin:8px 0 0;white-space:pre-wrap;">${esc(e.contenido)}</p>` : ''}
+                    ${htmlMedia(e)}
+                </div>`).join('');
+            caja.innerHTML = html;
+        }
+
+        // ---- Chats: SOLO LECTURA de auditoría (regla de la jefa: sin bloqueos automáticos) ----
+        async function subtabChats(caja) {
+            const id = usuarioExpediente.id;
+            const [enviados, recibidos, grupos] = await Promise.all([
+                supabaseClient.from('v_oficina_mensajes').select('*').eq('de_usuario_id', id).order('created_at', { ascending: false }).limit(80),
+                supabaseClient.from('v_oficina_mensajes').select('*').eq('para_usuario_id', id).order('created_at', { ascending: false }).limit(80),
+                supabaseClient.from('v_oficina_mensajes_grupo').select('*').eq('de_usuario_id', id).order('created_at', { ascending: false }).limit(80),
+            ]);
+            if (enviados.error) throw enviados.error;
+            if (grupos.error) throw grupos.error;
+            const fila = (m, dir) => `
+                <div class="tarjeta-360" style="padding:10px 12px;">
+                    <div style="font-size:11px;color:var(--texto-secundario);">${dir} · ${esc(fmtFecha(m.created_at))}</div>
+                    ${m.texto ? `<p style="margin:4px 0 0;white-space:pre-wrap;">${esc(m.texto)}</p>` : ''}
+                    ${m.url_media ? htmlMedia({ media_url: m.url_media, tipo: m.tipo }) : ''}
+                    ${m.youtube_id ? `<div><span class="badge-suave">🎬 YouTube</span></div>` : ''}
+                    ${m.eliminado_para_todos ? '<span class="badge-suave">Eliminado para todos</span>' : ''}
+                </div>`;
+            let html = '<div class="estado-vacio" style="font-size:12px;">Solo lectura de auditoría: aquí no se bloquea ni se filtra nada automáticamente (regla de la jefa).</div>';
+            html += '<h3 class="etiqueta-seccion">📤 Mensajes individuales enviados (' + (enviados.data || []).length + ')</h3>';
+            html += (enviados.data || []).length
+                ? enviados.data.map((m) => fila(m, 'Enviado a ' + String(m.para_usuario_id || '').slice(0, 8))).join('')
+                : '<div class="estado-vacio">Ninguno.</div>';
+            html += '<h3 class="etiqueta-seccion">📥 Mensajes individuales recibidos (' + (recibidos.data || []).length + ')</h3>';
+            html += (recibidos.data || []).length
+                ? recibidos.data.map((m) => fila(m, 'Recibido de ' + String(m.de_usuario_id || '').slice(0, 8))).join('')
+                : '<div class="estado-vacio">Ninguno.</div>';
+            html += '<h3 class="etiqueta-seccion">👥 Enviados en grupos (' + (grupos.data || []).length + ')</h3>';
+            html += (grupos.data || []).length
+                ? grupos.data.map((m) => fila(m, 'En grupo ' + String(m.grupo_id || '').slice(0, 8))).join('')
+                : '<div class="estado-vacio">Ninguno.</div>';
+            caja.innerHTML = html;
+        }
+
+        // ---- Comentarios y Notificaciones ----
+        async function subtabComentarios(caja) {
+            const id = usuarioExpediente.id;
+            const [coms, notifs] = await Promise.all([
+                supabaseClient.from('v_oficina_comentarios').select('*').eq('usuario_id', id).order('created_at', { ascending: false }).limit(60),
+                supabaseClient.from('v_oficina_notificaciones').select('*').or('usuario_id.eq.' + id + ',emisor_id.eq.' + id).order('fecha_creacion', { ascending: false }).limit(60),
+            ]);
+            if (coms.error) throw coms.error;
+            if (notifs.error) throw notifs.error;
+            let html = '<h3 class="etiqueta-seccion">💬 Comentarios (' + (coms.data || []).length + ')</h3>';
+            html += (coms.data || []).length
+                ? coms.data.map((c) => `
+                    <div class="tarjeta-360" style="padding:10px 12px;">
+                        <p style="margin:0;white-space:pre-wrap;">${esc(c.contenido || '')}</p>
+                        <div style="font-size:11px;color:var(--texto-secundario);margin-top:4px;">Publicado ${esc(fmtFecha(c.created_at))} · en publicación ${esc(String(c.publicacion_id || '').slice(0, 8))}${c.es_sticker ? ' · sticker' : ''}</div>
+                    </div>`).join('')
+                : '<div class="estado-vacio">No ha comentado nada.</div>';
+            html += '<h3 class="etiqueta-seccion">🔔 Notificaciones (' + (notifs.data || []).length + ')</h3>';
+            html += (notifs.data || []).length
+                ? notifs.data.map((n) => `
+                    <div class="tarjeta-360" style="padding:10px 12px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                        <span>${esc(n.contenido || n.tipo_notificacion || '')}</span>
+                        <span style="font-size:11px;color:var(--texto-secundario);">${esc(fmtFecha(n.fecha_creacion))}${n.emisor_id === id ? ' · enviada por ella' : ''}</span>
+                    </div>`).join('')
+                : '<div class="estado-vacio">Sin notificaciones.</div>';
+            caja.innerHTML = html;
+        }
+
+        // ---- Historial de reportes ----
+        async function subtabReportes(caja) {
+            const id = usuarioExpediente.id;
+            const { data, error } = await supabaseClient.from('v_oficina_reportes')
+                .select('*').or('id_usuario_reportado.eq.' + id + ',id_usuario_reporta.eq.' + id)
+                .order('creado_en', { ascending: false }).limit(100);
+            if (error) throw error;
+            const rs = data || [];
+            if (rs.length === 0) { caja.innerHTML = '<div class="estado-vacio">Su expediente está limpio: sin reportes ni a favor ni en contra. ✨</div>'; return; }
+            caja.innerHTML = rs.map((r) => {
+                const hecho = r.id_usuario_reporta === id;
+                return `
+                <div class="reporte-card prioridad-${esc(r.severidad || 'baja')}">
+                    <div class="reporte-info">
+                        <h3>${hecho ? 'Reporte hecho por ella' : 'Reporte contra ella'}
+                            <span class="badge badge-${esc(r.severidad || 'baja')}">${esc(r.severidad || 'baja')}</span>
+                            <span class="badge-suave">${esc(ETIQUETA_STATUS[r.status] || r.status || 'Pendiente')}</span>
+                        </h3>
+                        <p>${esc(r.motivo || '')}</p>
+                        <p style="opacity:.55;font-size:11px;">${esc(fmtFecha(r.creado_en))} · tipo ${esc(r.tipo || '')}</p>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // ---- Acciones de moderación ----
+        async function aprobarPublicacion(idPublicacion) {
+            if (!confirm('¿Aprobar esta publicación? Queda activa y visible para toda la comunidad.')) return;
+            const { error } = await supabaseClient.from('publicaciones')
+                .update({ moderation_status: 'active', estado: 'activo', motivo_ocultado: null })
+                .eq('id', idPublicacion);
+            if (error) { alert('No se pudo: ' + error.message); return; }
+            await cargarSubtab();
+        }
+        window.aprobarPublicacion = aprobarPublicacion;
+
+        async function eliminarPublicacion(idPublicacion) {
+            if (!confirm('¿Eliminar esta publicación? Esto no se puede deshacer.')) return;
+            if (!confirm('Segurísima, jefa? Se borra para siempre de la base de datos.')) return;
+            const { error } = await supabaseClient.from('publicaciones').delete().eq('id', idPublicacion);
+            if (error) { alert('No se pudo: ' + error.message); return; }
+            await cargarSubtab();
+        }
+        window.eliminarPublicacion = eliminarPublicacion;
+
+        async function listaNegraPublicacion(idPublicacion) {
+            const { data: p } = await supabaseClient.from('publicaciones').select('media_url, mensaje').eq('id', idPublicacion).maybeSingle();
+            if (!p || !p.media_url) { alert('Esta publicación no tiene multimedia para meter a la lista negra.'); return; }
+            if (!confirm('¿Añadir este multimedia a la Lista Negra? Si alguien intenta publicarlo de nuevo, la base de datos lo rechaza solo.')) return;
+            try {
+                const resp = await fetch(p.media_url);
+                const blob = await resp.blob();
+                const buf = await blob.arrayBuffer();
+                const digest = await crypto.subtle.digest('SHA-256', buf);
+                const hash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+                const { error: errIns } = await supabaseClient.from('blocked_hashes')
+                    .insert({ hash_value: hash, reason: 'Multimedia baneada desde La Oficina (' + new Date().toLocaleDateString('es') + ')' });
+                if (errIns) {
+                    if (String(errIns.message || '').includes('duplicate')) { alert('Ese multimedia ya estaba en la lista negra.'); }
+                    else { alert('No se pudo: ' + errIns.message); return; }
+                }
+                const { error: errUpd } = await supabaseClient.from('publicaciones')
+                    .update({ moderation_status: 'banned', estado: 'oculto', motivo_ocultado: 'Contenido en la lista negra' })
+                    .eq('id', idPublicacion);
+                if (errUpd) { alert('La huella quedó guardada, pero no se pudo ocultar la publicación: ' + errUpd.message); }
+                else { alert('Hecho: huella baneada y publicación oculta. Nadie podrá volver a subirla. 🚫'); }
+                await cargarSubtab();
+            } catch (e) {
+                alert('No se pudo calcular la huella del archivo: ' + e.message);
+            }
+        }
+        window.listaNegraPublicacion = listaNegraPublicacion;
+
+        async function accionExpedienteUsuario(banear) {
+            if (!usuarioExpediente) return;
+            if (!confirm(banear
+                ? '¿Suspender esta cuenta en silencio? Su contenido desaparece para la comunidad y NO recibe ningún aviso.'
+                : '¿Quitar la suspensión? Su contenido vuelve a ser visible.')) return;
+            const { error } = await supabaseClient.rpc('vex_moderar_usuario', {
+                p_usuario: usuarioExpediente.id, p_shadowban: banear, p_trust: null,
+            });
+            if (error) { alert('No se pudo: ' + error.message); return; }
+            await refrescarUsuarioExpediente();
+        }
+        window.accionExpedienteUsuario = accionExpedienteUsuario;
     </script>
 </body>
 </html>
